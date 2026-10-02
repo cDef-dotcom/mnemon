@@ -26,6 +26,18 @@ export default function LearnPage() {
   const currentLesson = SOMMELIER_PRESET_LESSONS[activeLessonIndex];
   const currentQuestion: PresetQuestion | undefined = currentLesson?.questions[currentQIndex];
 
+  const getQuestionOptions = (q: PresetQuestion): string[] => {
+    if (q.options && q.options.length > 0) {
+      return q.options;
+    }
+    if (q.type === 'true_false') {
+      return ['True', 'False'];
+    }
+    const distractors = (q.distractors || []).map((d) => d.text);
+    const all = [...distractors, q.expectedAnswer];
+    return Array.from(new Set(all)).sort();
+  };
+
   const handleStartSession = () => {
     setSessionState('teach');
     setTeachConceptIndex(0);
@@ -179,6 +191,8 @@ export default function LearnPage() {
 
   // 3. TESTING PHASE (10 Scored Interactions)
   if (sessionState === 'testing' && currentQuestion) {
+    const options = getQuestionOptions(currentQuestion);
+
     return (
       <div className="flex-1 flex flex-col justify-between max-w-xl mx-auto w-full py-4 animate-in fade-in duration-200">
         {/* Top Progress Indicator */}
@@ -209,29 +223,27 @@ export default function LearnPage() {
           {/* Response Options */}
           {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false') && (
             <div className="space-y-2.5">
-              {((currentQuestion.distractors || []).map((d) => d.text).concat(currentQuestion.expectedAnswer))
-                .sort()
-                .map((optionText, idx) => (
-                  <button
-                    key={idx}
-                    disabled={feedback !== null}
-                    onClick={() => setSelectedMCQ(optionText)}
-                    className={`w-full p-4 rounded-xl border text-left text-sm font-medium transition-all flex items-center justify-between ${
-                      selectedMCQ === optionText
-                        ? 'border-indigo-500 bg-indigo-950/40 text-indigo-200 shadow-md'
-                        : 'border-slate-800 bg-slate-900 hover:border-slate-700 text-slate-200'
+              {options.map((optionText, idx) => (
+                <button
+                  key={idx}
+                  disabled={feedback !== null}
+                  onClick={() => setSelectedMCQ(optionText)}
+                  className={`w-full p-4 rounded-xl border text-left text-sm font-medium transition-all flex items-center justify-between ${
+                    selectedMCQ === optionText
+                      ? 'border-indigo-500 bg-indigo-950/40 text-indigo-200 shadow-md'
+                      : 'border-slate-800 bg-slate-900 hover:border-slate-700 text-slate-200'
+                  }`}
+                >
+                  <span>{optionText}</span>
+                  <div
+                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      selectedMCQ === optionText ? 'border-indigo-400 bg-indigo-500' : 'border-slate-700'
                     }`}
                   >
-                    <span>{optionText}</span>
-                    <div
-                      className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        selectedMCQ === optionText ? 'border-indigo-400 bg-indigo-500' : 'border-slate-700'
-                      }`}
-                    >
-                      {selectedMCQ === optionText && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                    </div>
-                  </button>
-                ))}
+                    {selectedMCQ === optionText && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                  </div>
+                </button>
+              ))}
             </div>
           )}
 
