@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Wine, FileText, CheckCircle2, Sparkles, Upload } from 'lucide-react';
+import { Plus, Wine, FileText, CheckCircle2, Sparkles, Upload, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface SourceItem {
@@ -26,27 +26,60 @@ export default function LibraryPage() {
   ]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState<'text' | 'pdf' | 'url'>('text');
   const [pastedText, setPastedText] = useState('');
   const [titleInput, setTitleInput] = useState('');
 
-  const handleAddSource = (e: React.FormEvent) => {
+  const handleAddSource = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!titleInput.trim()) return;
 
-    const newSource: SourceItem = {
-      id: `source-${Date.now()}`,
-      name: titleInput,
-      type: activeTab,
-      mastery: 0,
-      lessonsCount: 4,
-      status: 'ready',
-    };
+    setIsProcessing(true);
 
-    setSources([newSource, ...sources]);
-    setTitleInput('');
-    setPastedText('');
-    setIsModalOpen(false);
+    try {
+      const res = await fetch('/api/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: titleInput,
+          content: pastedText || titleInput,
+          type: activeTab,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.source) {
+        const newSource: SourceItem = {
+          id: data.source.id,
+          name: data.source.name,
+          type: data.source.type,
+          mastery: 0,
+          lessonsCount: data.source.lessonsCount || 2,
+          status: 'ready',
+        };
+        setSources([newSource, ...sources]);
+      } else {
+        // Fallback local creation
+        const newSource: SourceItem = {
+          id: `source-${Date.now()}`,
+          name: titleInput,
+          type: activeTab,
+          mastery: 0,
+          lessonsCount: 2,
+          status: 'ready',
+        };
+        setSources([newSource, ...sources]);
+      }
+    } catch (err) {
+      console.error('Ingestion request error:', err);
+    } finally {
+      setIsProcessing(false);
+      setTitleInput('');
+      setPastedText('');
+      setIsModalOpen(false);
+    }
   };
 
   return (
@@ -165,6 +198,7 @@ export default function LibraryPage() {
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
+                disabled={isProcessing}
                 className="text-slate-400 hover:text-white text-sm px-2 py-1 rounded-md"
               >
                 ✕
@@ -206,7 +240,7 @@ export default function LibraryPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Bordeaux Wine Classification Notes"
+                  placeholder="e.g., Champagne & Sparkling Wine Technical Manual"
                   value={titleInput}
                   onChange={(e) => setTitleInput(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
@@ -253,6 +287,7 @@ export default function LibraryPage() {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
+                  disabled={isProcessing}
                   onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white"
                 >
@@ -260,9 +295,16 @@ export default function LibraryPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-md shadow-indigo-600/20"
+                  disabled={isProcessing}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-md shadow-indigo-600/20 flex items-center gap-2"
                 >
-                  Ingest & Process
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Extracting Knowledge...
+                    </>
+                  ) : (
+                    'Ingest & Process'
+                  )}
                 </button>
               </div>
             </form>
