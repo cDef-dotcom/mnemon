@@ -195,11 +195,16 @@ export default function LearnPage() {
           </div>
         </div>
 
-        {/* Question Container */}
+        {/* Question Container Card */}
         <div className="my-auto space-y-6 py-4">
-          <h2 className="text-lg sm:text-xl font-bold text-white leading-snug">
-            {currentQuestion.prompt}
-          </h2>
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-indigo-400 font-bold px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">
+              {currentQuestion.type.replace('_', ' ')}
+            </span>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-100 leading-snug">
+              {currentQuestion.prompt}
+            </h2>
+          </div>
 
           {/* Response Options */}
           {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false') && (
