@@ -1,11 +1,19 @@
 'use client';
 
-import { useState } from 'react';
-import { SOMMELIER_PRESET_LESSONS, PresetQuestion } from '@/lib/sommelier-preset';
-import { Brain, CheckCircle, XCircle, ArrowRight, RotateCcw, Trophy, Wine } from 'lucide-react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { SOMMELIER_PRESET_LESSONS, PresetQuestion, PresetLesson } from '@/lib/sommelier-preset';
+import { getInitialSources, getSourceById, StoredSource } from '@/lib/storage';
+import { Brain, CheckCircle, XCircle, ArrowRight, RotateCcw, Trophy } from 'lucide-react';
 import Link from 'next/link';
 
-export default function LearnPage() {
+function LearnContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const sourceId = searchParams.get('sourceId');
+
+  const [activeSource, setActiveSource] = useState<StoredSource | null>(null);
+  const [allSources, setAllSources] = useState<StoredSource[]>([]);
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [sessionState, setSessionState] = useState<'idle' | 'teach' | 'testing' | 'summary'>('idle');
 
@@ -23,7 +31,29 @@ export default function LearnPage() {
   // User XP state
   const [, setXp] = useState(120);
 
-  const currentLesson = SOMMELIER_PRESET_LESSONS[activeLessonIndex];
+  useEffect(() => {
+    const sources = getInitialSources();
+    setAllSources(sources);
+
+    if (sourceId) {
+      const found = getSourceById(sourceId);
+      if (found) {
+        setActiveSource(found);
+        setActiveLessonIndex(0);
+        return;
+      }
+    }
+    // Default to first source
+    if (sources.length > 0) {
+      setActiveSource(sources[0]);
+    }
+  }, [sourceId]);
+
+  const activeLessons: PresetLesson[] = activeSource?.lessons && activeSource.lessons.length > 0
+    ? activeSource.lessons
+    : SOMMELIER_PRESET_LESSONS;
+
+  const currentLesson: PresetLesson = activeLessons[activeLessonIndex] || activeLessons[0] || SOMMELIER_PRESET_LESSONS[0];
   const currentQuestion: PresetQuestion | undefined = currentLesson?.questions[currentQIndex];
 
   const getQuestionOptions = (q: PresetQuestion): string[] => {
@@ -48,7 +78,7 @@ export default function LearnPage() {
   };
 
   const handleNextTeach = () => {
-    if (teachConceptIndex + 1 < currentLesson.nodes.length) {
+    if (teachConceptIndex + 1 < (currentLesson?.nodes?.length || 0)) {
       setTeachConceptIndex((prev) => prev + 1);
     } else {
       setSessionState('testing');
@@ -94,16 +124,20 @@ export default function LearnPage() {
     setUserResponse('');
     setSelectedMCQ(null);
 
-    if (currentQIndex + 1 < 10 && currentQIndex + 1 < currentLesson.questions.length) {
+    const questionsList = currentLesson?.questions || [];
+    if (currentQIndex + 1 < 10 && currentQIndex + 1 < questionsList.length) {
       setCurrentQIndex((prev) => prev + 1);
     } else {
-      // Finished 10-question assessment
       const finalScore = score;
       if (finalScore >= 8) {
-        setXp((prev) => prev + 50); // mastery bonus
+        setXp((prev) => prev + 50);
       }
       setSessionState('summary');
     }
+  };
+
+  const handleSourceChange = (newSourceId: string) => {
+    router.push(`/learn?sourceId=${newSourceId}`);
   };
 
   // 1. IDLE SCREEN (One primary choice: "Continue")
@@ -115,30 +149,42 @@ export default function LearnPage() {
             <Brain className="w-8 h-8" />
           </div>
 
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-semibold uppercase tracking-wider mb-2">
-              <Wine className="w-3.5 h-3.5" /> Sommelier Mastery Queue
+          <div className="space-y-3">
+            {/* Active Source Selector */}
+            <div className="flex items-center justify-center gap-2">
+              <select
+                value={activeSource?.id || ''}
+                onChange={(e) => handleSourceChange(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl focus:outline-none focus:border-indigo-500"
+              >
+                {allSources.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    📚 {s.name} ({s.lessonsCount} lessons)
+                  </option>
+                ))}
+              </select>
             </div>
+
             <h1 className="text-3xl font-extrabold text-white tracking-tight">
-              {currentLesson.title}
+              {currentLesson?.title || 'Lesson 1'}
             </h1>
-            <p className="text-slate-400 text-sm mt-2">
+            <p className="text-slate-400 text-sm mt-1">
               10-question active recall assessment · 80% mastery target
             </p>
           </div>
 
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-left space-y-2 text-xs text-slate-300">
             <div className="flex justify-between text-slate-400">
+              <span>Active Source:</span>
+              <span className="font-semibold text-indigo-300">{activeSource?.name || 'Sommelier Fundamentals'}</span>
+            </div>
+            <div className="flex justify-between text-slate-400">
               <span>Concepts to teach:</span>
-              <span className="font-semibold text-white">{currentLesson.nodes.length} concepts</span>
+              <span className="font-semibold text-white">{currentLesson?.nodes?.length || 0} concepts</span>
             </div>
             <div className="flex justify-between text-slate-400">
               <span>Mastery requirement:</span>
               <span className="font-semibold text-emerald-400">≥8 / 10 correct</span>
-            </div>
-            <div className="flex justify-between text-slate-400">
-              <span>Review items due:</span>
-              <span className="font-semibold text-indigo-400">0 concepts</span>
             </div>
           </div>
 
@@ -155,13 +201,18 @@ export default function LearnPage() {
 
   // 2. TEACH PHASE (Minimum viable exposure)
   if (sessionState === 'teach') {
-    const concept = currentLesson.nodes[teachConceptIndex];
+    const concept = currentLesson?.nodes?.[teachConceptIndex];
+    if (!concept) {
+      setSessionState('testing');
+      return null;
+    }
+
     return (
       <div className="flex-1 flex flex-col justify-between max-w-xl mx-auto w-full py-6 animate-in fade-in duration-200">
         <div className="space-y-6">
           <div className="flex items-center justify-between text-xs text-slate-400 font-mono border-b border-slate-800 pb-3">
             <span>TEACH PHASE · CONCEPT {teachConceptIndex + 1} OF {currentLesson.nodes.length}</span>
-            <span className="text-indigo-400">Mnemon Learning Loop</span>
+            <span className="text-indigo-400 truncate max-w-[180px]">{activeSource?.name}</span>
           </div>
 
           <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl">
@@ -364,7 +415,7 @@ export default function LearnPage() {
           {/* Action */}
           {passed ? (
             <div className="space-y-2">
-              {activeLessonIndex + 1 < SOMMELIER_PRESET_LESSONS.length ? (
+              {activeLessonIndex + 1 < activeLessons.length ? (
                 <button
                   onClick={() => {
                     setActiveLessonIndex((prev) => prev + 1);
@@ -397,4 +448,16 @@ export default function LearnPage() {
   }
 
   return null;
+}
+
+export default function LearnPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center p-12 text-slate-400 text-sm">
+        Loading Learn Session...
+      </div>
+    }>
+      <LearnContent />
+    </Suspense>
+  );
 }

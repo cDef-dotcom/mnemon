@@ -1,35 +1,43 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Wine, FileText, CheckCircle2, Sparkles, Upload, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Wine, FileText, CheckCircle2, Sparkles, Upload, Loader2, Link2 } from 'lucide-react';
 import Link from 'next/link';
+import { getInitialSources, saveSource, StoredSource } from '@/lib/storage';
+import { PresetLesson } from '@/lib/sommelier-preset';
 
-interface SourceItem {
-  id: string;
-  name: string;
-  type: string;
-  mastery: number;
-  lessonsCount: number;
-  status: 'ready' | 'processing';
+interface ApiQuestion {
+  id?: string;
+  knowledgeNodeId?: string;
+  type?: 'multiple_choice' | 'fill_blank' | 'typed_recall' | 'matching' | 'ordering' | 'true_false';
+  prompt: string;
+  expectedAnswer: string;
+  acceptableVariants?: string[];
+  distractors?: { text: string; misconceptionReason?: string }[];
+  options?: string[];
+  difficulty?: number;
+  groundingChunk?: string;
+}
+
+interface ApiLesson {
+  id?: string;
+  title?: string;
+  nodes?: { id: string; content: string; detail?: string | null; sourceChunk: string }[];
+  questions?: ApiQuestion[];
 }
 
 export default function LibraryPage() {
-  const [sources, setSources] = useState<SourceItem[]>([
-    {
-      id: 'sommelier-wine-fundamentals',
-      name: 'Wine Sommelier Fundamentals',
-      type: 'sommelier_preset',
-      mastery: 0,
-      lessonsCount: 3,
-      status: 'ready',
-    },
-  ]);
-
+  const [sources, setSources] = useState<StoredSource[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState<'text' | 'pdf' | 'url'>('text');
   const [pastedText, setPastedText] = useState('');
   const [titleInput, setTitleInput] = useState('');
+  const [urlInput, setUrlInput] = useState('');
+
+  useEffect(() => {
+    setSources(getInitialSources());
+  }, []);
 
   const handleAddSource = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,46 +46,69 @@ export default function LibraryPage() {
     setIsProcessing(true);
 
     try {
+      const payloadContent = activeTab === 'url' ? urlInput : (pastedText || titleInput);
+
       const res = await fetch('/api/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: titleInput,
-          content: pastedText || titleInput,
+          content: payloadContent,
           type: activeTab,
         }),
       });
 
       const data = await res.json();
 
-      if (res.ok && data.source) {
-        const newSource: SourceItem = {
-          id: data.source.id,
-          name: data.source.name,
-          type: data.source.type,
-          mastery: 0,
-          lessonsCount: data.source.lessonsCount || 2,
-          status: 'ready',
-        };
-        setSources([newSource, ...sources]);
-      } else {
-        // Fallback local creation
-        const newSource: SourceItem = {
-          id: `source-${Date.now()}`,
-          name: titleInput,
-          type: activeTab,
-          mastery: 0,
-          lessonsCount: 2,
-          status: 'ready',
-        };
-        setSources([newSource, ...sources]);
+      let createdLessons: PresetLesson[] = [];
+
+      if (res.ok && data.lessons && Array.isArray(data.lessons)) {
+        createdLessons = (data.lessons as ApiLesson[]).map((l: ApiLesson, idx: number) => ({
+          id: l.id || `custom-lesson-${idx + 1}`,
+          title: l.title || `Lesson ${idx + 1}: ${titleInput}`,
+          nodes: (l.nodes || []).map((n) => ({
+            id: n.id,
+            type: 'concept',
+            content: n.content,
+            detail: n.detail || '',
+            importance: 4,
+            category: 'memorize',
+            sourceChunks: [n.sourceChunk],
+          })),
+          questions: (l.questions || []).map((q: ApiQuestion, qIdx: number) => ({
+            id: q.id || `custom-q-${idx}-${qIdx}`,
+            knowledgeNodeId: q.knowledgeNodeId || `node-${qIdx}`,
+            type: q.type || 'multiple_choice',
+            prompt: q.prompt,
+            expectedAnswer: q.expectedAnswer,
+            acceptableVariants: q.acceptableVariants || [],
+            distractors: q.distractors || [],
+            options: q.options || undefined,
+            difficulty: q.difficulty || 2,
+            groundingChunk: q.groundingChunk || payloadContent.slice(0, 100),
+          })),
+        }));
       }
+
+      const newSource: StoredSource = {
+        id: `source-${Date.now()}`,
+        name: titleInput,
+        type: activeTab,
+        mastery: 0,
+        lessonsCount: createdLessons.length || 1,
+        status: 'ready',
+        lessons: createdLessons,
+      };
+
+      const updated = saveSource(newSource);
+      setSources(updated);
     } catch (err) {
       console.error('Ingestion request error:', err);
     } finally {
       setIsProcessing(false);
       setTitleInput('');
       setPastedText('');
+      setUrlInput('');
       setIsModalOpen(false);
     }
   };
@@ -110,7 +141,7 @@ export default function LibraryPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                Active Training Subject
+                Sommelier Master Preset
               </span>
             </div>
             <h3 className="text-lg font-semibold text-amber-100">Wine Sommelier Fundamentals</h3>
@@ -119,10 +150,10 @@ export default function LibraryPage() {
             </p>
             <div className="pt-3 flex items-center gap-3">
               <Link
-                href="/learn"
+                href="/learn?sourceId=sommelier-wine-fundamentals"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs tracking-wide uppercase transition-all shadow-md"
               >
-                Start Sommelier Session →
+                Learn Preset Now →
               </Link>
             </div>
           </div>
@@ -132,7 +163,7 @@ export default function LibraryPage() {
       {/* Sources Grid */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-          Sources ({sources.length})
+          Your Knowledge Sources ({sources.length})
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -146,6 +177,8 @@ export default function LibraryPage() {
                   <div className="flex items-center gap-2.5">
                     {src.type === 'sommelier_preset' ? (
                       <Wine className="w-5 h-5 text-amber-400" />
+                    ) : src.type === 'url' ? (
+                      <Link2 className="w-5 h-5 text-sky-400" />
                     ) : (
                       <FileText className="w-5 h-5 text-indigo-400" />
                     )}
@@ -154,7 +187,7 @@ export default function LibraryPage() {
                     </h3>
                   </div>
                   <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 font-mono">
-                    {src.lessonsCount} lessons
+                    {src.lessonsCount} {src.lessonsCount === 1 ? 'lesson' : 'lessons'}
                   </span>
                 </div>
 
@@ -177,8 +210,8 @@ export default function LibraryPage() {
                   <CheckCircle2 className="w-3.5 h-3.5" /> Ready for recall
                 </span>
                 <Link
-                  href="/learn"
-                  className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                  href={`/learn?sourceId=${src.id}`}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition-all"
                 >
                   Learn Now →
                 </Link>
@@ -208,6 +241,7 @@ export default function LibraryPage() {
             {/* Type selector */}
             <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
               <button
+                type="button"
                 onClick={() => setActiveTab('text')}
                 className={`flex-1 py-2 rounded-lg transition-all ${
                   activeTab === 'text' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
@@ -216,6 +250,7 @@ export default function LibraryPage() {
                 Paste Text / MD
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab('pdf')}
                 className={`flex-1 py-2 rounded-lg transition-all ${
                   activeTab === 'pdf' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
@@ -224,6 +259,7 @@ export default function LibraryPage() {
                 Upload PDF
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab('url')}
                 className={`flex-1 py-2 rounded-lg transition-all ${
                   activeTab === 'url' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
@@ -240,7 +276,7 @@ export default function LibraryPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Champagne & Sparkling Wine Technical Manual"
+                  placeholder="e.g., Champagne & Terroir Technical Reference"
                   value={titleInput}
                   onChange={(e) => setTitleInput(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
@@ -279,7 +315,10 @@ export default function LibraryPage() {
                   <input
                     type="url"
                     placeholder="https://..."
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                    required
                   />
                 </div>
               )}
