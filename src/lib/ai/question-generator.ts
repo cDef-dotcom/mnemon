@@ -9,8 +9,8 @@ export const GeneratedQuestionSchema = z.object({
   type: z.enum(['multiple_choice', 'fill_blank', 'typed_recall', 'matching', 'ordering', 'true_false']),
   prompt: z.string().describe('Clear, unambiguous test question'),
   expectedAnswer: z.string().describe('The strictly correct answer derived from source'),
-  acceptableVariants: z.array(z.string()).optional().describe('Acceptable synonyms or variations'),
-  distractors: z.array(z.object({ text: z.string(), misconceptionReason: z.string().optional() })).optional(),
+  acceptableVariants: z.array(z.string()).nullable().describe('Acceptable synonyms or variations'),
+  distractors: z.array(z.object({ text: z.string() })).nullable(),
   difficulty: z.number().min(1).max(5),
   groundingChunk: z.string().describe('Source text excerpt supporting the expected answer'),
 });
@@ -50,6 +50,13 @@ Requirements:
     return object.questions as PresetQuestion[];
   } catch (error) {
     console.error('[Mnemon AI] Question generation error:', error);
+    const causeMsg = error instanceof Error ? error.message : '';
+    // Distinguish our own request-shape bugs from key/network problems
+    if (/invalid_json_schema|invalid schema/i.test(causeMsg)) {
+      throw new Error(
+        'Question generation failed due to an app formatting issue, not your API key. Check the server terminal log for details.'
+      );
+    }
     throw new Error(
       'Could not reach OpenAI to generate questions. Check your API key and connection, then try again.'
     );

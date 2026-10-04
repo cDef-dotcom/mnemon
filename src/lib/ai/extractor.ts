@@ -68,6 +68,12 @@ Instructions:
     return object;
   } catch (error) {
     console.error('[Mnemon AI] Extraction error:', error);
+    const causeMsg = error instanceof Error ? error.message : '';
+    if (/invalid_json_schema|invalid schema/i.test(causeMsg)) {
+      throw new Error(
+        'Lesson extraction failed due to an app formatting issue, not your API key. Check the server terminal log for details.'
+      );
+    }
     throw new Error(
       'Could not reach OpenAI to build lessons. Check your API key and connection, then try again.'
     );
