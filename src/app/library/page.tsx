@@ -34,6 +34,7 @@ export default function LibraryPage() {
   const [pastedText, setPastedText] = useState('');
   const [titleInput, setTitleInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
+  const [ingestError, setIngestError] = useState<string | null>(null);
 
   useEffect(() => {
     setSources(getInitialSources());
@@ -44,6 +45,7 @@ export default function LibraryPage() {
     if (!titleInput.trim()) return;
 
     setIsProcessing(true);
+    setIngestError(null);
 
     try {
       const payloadContent = activeTab === 'url' ? urlInput : (pastedText || titleInput);
@@ -59,6 +61,10 @@ export default function LibraryPage() {
       });
 
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to ingest material.');
+      }
 
       let createdLessons: PresetLesson[] = [];
 
@@ -104,6 +110,7 @@ export default function LibraryPage() {
       setSources(updated);
     } catch (err) {
       console.error('Ingestion request error:', err);
+      setIngestError(err instanceof Error ? err.message : 'Something went wrong while creating lessons.');
     } finally {
       setIsProcessing(false);
       setTitleInput('');
@@ -131,6 +138,14 @@ export default function LibraryPage() {
           Add Material
         </button>
       </div>
+
+      {/* Ingestion error banner */}
+      {ingestError && (
+        <div className="p-4 rounded-xl bg-red-950/50 border border-red-500/30 text-red-200 text-sm">
+          <span className="font-semibold">Couldn&apos;t create lessons: </span>
+          {ingestError}
+        </div>
+      )}
 
       {/* Preset Banner */}
       <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-purple-950/30 to-slate-900 border border-amber-500/20 relative overflow-hidden">

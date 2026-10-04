@@ -40,8 +40,9 @@ export async function extractKnowledgeFromText(text: string, title: string): Pro
   const model = getExtractionModel();
 
   if (!model) {
-    console.warn('[Mnemon AI] OPENAI_API_KEY not configured. Falling back to heuristic parsing.');
-    return generateFallbackCurriculum(text, title);
+    throw new Error(
+      'OpenAI is not configured. Add your OPENAI_API_KEY to .env.local and restart the dev server.'
+    );
   }
 
   try {
@@ -66,36 +67,9 @@ Instructions:
 
     return object;
   } catch (error) {
-    console.error('[Mnemon AI] Extraction error, returning fallback:', error);
-    return generateFallbackCurriculum(text, title);
+    console.error('[Mnemon AI] Extraction error:', error);
+    throw new Error(
+      'Could not reach OpenAI to build lessons. Check your API key and connection, then try again.'
+    );
   }
-}
-
-function generateFallbackCurriculum(text: string, title: string): ExtractedCurriculum {
-  const paragraphs = text.split('\n\n').filter((p) => p.trim().length > 20);
-  
-  const nodes = paragraphs.slice(0, 6).map((p, idx) => ({
-    id: `fallback-node-${idx + 1}`,
-    type: 'concept' as const,
-    content: p.slice(0, 150),
-    detail: p.length > 150 ? p.slice(150, 300) : null,
-    importance: 4,
-    category: 'memorize' as const,
-    sourceChunk: p.slice(0, 200),
-  }));
-
-  return {
-    lessons: [
-      {
-        id: `fallback-lesson-1`,
-        title: `${title} - Core Fundamentals`,
-        nodes: nodes.slice(0, 3),
-      },
-      {
-        id: `fallback-lesson-2`,
-        title: `${title} - Key Principles`,
-        nodes: nodes.slice(3, 6),
-      },
-    ],
-  };
 }

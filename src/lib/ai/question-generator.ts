@@ -26,8 +26,9 @@ export async function generateQuestionsForLesson(
   const model = getExtractionModel();
 
   if (!model) {
-    console.warn('[Mnemon AI] OPENAI_API_KEY not configured. Generating fallback questions.');
-    return generateFallbackQuestions(nodes);
+    throw new Error(
+      'OpenAI is not configured. Add your OPENAI_API_KEY to .env.local and restart the dev server.'
+    );
   }
 
   try {
@@ -48,38 +49,9 @@ Requirements:
 
     return object.questions as PresetQuestion[];
   } catch (error) {
-    console.error('[Mnemon AI] Question generation error, using fallback:', error);
-    return generateFallbackQuestions(nodes);
+    console.error('[Mnemon AI] Question generation error:', error);
+    throw new Error(
+      'Could not reach OpenAI to generate questions. Check your API key and connection, then try again.'
+    );
   }
-}
-
-function generateFallbackQuestions(
-  nodes: Array<{ id: string; content: string; sourceChunk: string }>
-): PresetQuestion[] {
-  return nodes.slice(0, 5).flatMap((node, idx) => [
-    {
-      id: `fallback-q-${idx}-1`,
-      knowledgeNodeId: node.id,
-      type: 'multiple_choice' as const,
-      prompt: `Regarding: ${node.content.slice(0, 80)}... which statement is true?`,
-      expectedAnswer: node.content.slice(0, 100),
-      distractors: [
-        { text: 'The opposite of the stated facts' },
-        { text: 'Unrelated technical assertion' },
-        { text: 'Partially correct but inverted' },
-      ],
-      difficulty: 2,
-      groundingChunk: node.sourceChunk,
-    },
-    {
-      id: `fallback-q-${idx}-2`,
-      knowledgeNodeId: node.id,
-      type: 'typed_recall' as const,
-      prompt: `Recall key detail for: ${node.content.slice(0, 60)}`,
-      expectedAnswer: node.content.split(' ')[0] || 'correct',
-      acceptableVariants: [node.content.split(' ')[0] || 'correct'],
-      difficulty: 3,
-      groundingChunk: node.sourceChunk,
-    },
-  ]).slice(0, 10);
 }
