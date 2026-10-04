@@ -25,6 +25,7 @@ function LearnContent() {
   const [userResponse, setUserResponse] = useState('');
   const [selectedMCQ, setSelectedMCQ] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; explanation: string } | null>(null);
+  const [isGrading, setIsGrading] = useState(false);
   const [score, setScore] = useState(0);
   const [sessionResults, setSessionResults] = useState<{ qPrompt: string; isCorrect: boolean }[]>([]);
 
@@ -85,8 +86,8 @@ function LearnContent() {
     }
   };
 
-  const handleSubmitAnswer = () => {
-    if (!currentQuestion || feedback !== null) return;
+  const handleSubmitAnswer = async () => {
+    if (!currentQuestion || feedback !== null || isGrading) return;
 
     let isCorrect = false;
     let explanation = '';
@@ -98,16 +99,44 @@ function LearnContent() {
         ? `Correct! "${currentQuestion.expectedAnswer}" matches the source.`
         : `Expected: "${currentQuestion.expectedAnswer}". Source: ${currentQuestion.groundingChunk}`;
     } else {
-      // Typed / fill-blank
+      // Typed / fill-blank: fast exact check first, then AI semantic grading
       if (!userResponse.trim()) return;
       const cleanUser = userResponse.trim().toLowerCase();
       const cleanExpected = currentQuestion.expectedAnswer.trim().toLowerCase();
       const variants = (currentQuestion.acceptableVariants || []).map((v) => v.toLowerCase());
 
-      isCorrect = cleanUser === cleanExpected || variants.includes(cleanUser);
-      explanation = isCorrect
-        ? `Correct! "${currentQuestion.expectedAnswer}" is verifiable from source.`
-        : `Incorrect. Expected: "${currentQuestion.expectedAnswer}". Source: ${currentQuestion.groundingChunk}`;
+      if (cleanUser === cleanExpected || variants.includes(cleanUser)) {
+        isCorrect = true;
+        explanation = `Correct! "${currentQuestion.expectedAnswer}" is verifiable from source.`;
+      } else {
+        setIsGrading(true);
+        try {
+          const res = await fetch('/api/evaluate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: currentQuestion.prompt,
+              expectedAnswer: currentQuestion.expectedAnswer,
+              acceptableVariants: currentQuestion.acceptableVariants || [],
+              userAnswer: userResponse,
+              groundingChunk: currentQuestion.groundingChunk || '',
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && typeof data.isCorrect === 'boolean') {
+            isCorrect = data.isCorrect;
+            explanation = data.explanation || (isCorrect ? 'Correct!' : 'Incorrect.');
+          } else {
+            throw new Error(data.error || 'Evaluation failed');
+          }
+        } catch (err) {
+          console.error('Evaluation request error:', err);
+          // Fall back to strict grading when the AI judge is unavailable
+          explanation = `Incorrect. Expected: "${currentQuestion.expectedAnswer}". Source: ${currentQuestion.groundingChunk}`;
+        } finally {
+          setIsGrading(false);
+        }
+      }
     }
 
     if (isCorrect) {
@@ -302,7 +331,7 @@ function LearnContent() {
             <div>
               <input
                 type="text"
-                disabled={feedback !== null}
+                disabled={feedback !== null || isGrading}
                 placeholder="Type your answer here..."
                 value={userResponse}
                 onChange={(e) => setUserResponse(e.target.value)}
@@ -344,13 +373,14 @@ function LearnContent() {
             <button
               onClick={handleSubmitAnswer}
               disabled={
-                (currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false')
+                isGrading ||
+                ((currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false')
                   ? !selectedMCQ
-                  : !userResponse.trim()
+                  : !userResponse.trim())
               }
               className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all"
             >
-              Submit Answer
+              {isGrading ? 'Grading...' : 'Submit Answer'}
             </button>
           ) : (
             <button
