@@ -13,12 +13,12 @@ export interface EvaluationRequest {
 export interface EvaluationResult {
   isCorrect: boolean;
   explanation: string;
-  errorType?: string;
+  errorType?: string | null;
 }
 
 const EvaluationSchema = z.object({
   isCorrect: z.boolean().describe('True if user answer demonstrates understanding of the concept'),
-  errorType: z.enum(['forgotten_fact', 'confused_terminology', 'misunderstood_concept', 'minor_typo', 'careless', 'none']).optional(),
+  errorType: z.enum(['forgotten_fact', 'confused_terminology', 'misunderstood_concept', 'minor_typo', 'careless', 'none']).nullable(),
   explanation: z.string().describe('One concise sentence explaining why it is correct or what was wrong'),
 });
 
@@ -64,7 +64,7 @@ Expected Answer: "${req.expectedAnswer}"
 Source Context: "${req.groundingChunk}"
 Learner's Typed Answer: "${req.userAnswer}"
 
-Evaluate if the response is semantically correct.`,
+Evaluate if the response is semantically correct. Be generous with terse answers: a single keyword or short fragment that identifies the core mechanism counts as correct. For example, if the question is "Why is red wine typically red?" and the learner answers "skins", that is CORRECT because it identifies grape skins as the cause of the color. Only mark wrong when the answer misses the concept, contradicts the source, or is too vague to show any understanding (e.g. answering "wine" or "grapes" to the question above).`,
     });
 
     return object;
