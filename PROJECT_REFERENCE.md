@@ -6,6 +6,8 @@
 - **Minimal UX**: Library → Learn → Progress
 - **Assessment Rule**: 10 questions per lesson, 8/10 required for mastery
 - **Remediation**: Failing a lesson (<8/10) triggers targeted re-teaching and alternate question retakes
+- **High-Yield Extraction Prioritization**: Always prioritizes actionable operational knowledge (recipes, ingredients, measurements, ratios, procedures, key rules/distinctions) over historical trivia and fluff
+- **Webpage Scraping**: Direct URL ingestion using Cheerio to strip noise and parse article/recipe content
 - **Sommelier Wine Preset**: Built-in Wine Sommelier training material (1855 Bordeaux Growths, Terroirs, Sparkling Methods, TCA Faults, Food Pairings)
 - **AI Extraction & Evaluation**: Vercel AI SDK integration (`gpt-4o` for knowledge graph extraction & question generation, `gpt-4o-mini` for generous semantic grading)
 
@@ -18,7 +20,7 @@ mnemon/
 │   │   ├── layout.tsx       # Root layout with 3-tab navigation
 │   │   ├── page.tsx         # Home redirect to /learn
 │   │   ├── api/
-│   │   │   ├── ingest/      # AI Knowledge extraction & curriculum endpoint
+│   │   │   ├── ingest/      # AI Knowledge extraction & URL scraping endpoint
 │   │   │   └── evaluate/    # Fast AI semantic grading endpoint
 │   │   ├── library/         # Source ingestion and management UI
 │   │   ├── learn/           # Core 10-question active recall loop
@@ -29,10 +31,12 @@ mnemon/
 │   ├── lib/
 │   │   ├── ai/
 │   │   │   ├── client.ts    # OpenAI provider router
-│   │   │   ├── extractor.ts # Knowledge Graph & Curriculum extractor (gpt-4o)
+│   │   │   ├── extractor.ts # High-yield Knowledge Graph & Curriculum extractor (gpt-4o)
 │   │   │   ├── question-generator.ts # Grounded question pre-generator
 │   │   │   └── evaluator.ts # Semantic typed answer evaluator (gpt-4o-mini)
+│   │   ├── scraper.ts       # Cheerio-based web article & recipe scraper
 │   │   ├── sommelier-preset.ts # Built-in Wine Sommelier training dataset
+│   │   ├── storage.ts       # Client-side persistence and source loading
 │   │   └── utils.ts         # Styling utilities
 │   └── types/
 │       └── index.ts         # TypeScript domain definitions

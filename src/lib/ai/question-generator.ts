@@ -7,7 +7,7 @@ export const GeneratedQuestionSchema = z.object({
   id: z.string(),
   knowledgeNodeId: z.string(),
   type: z.enum(['multiple_choice', 'fill_blank', 'typed_recall', 'matching', 'ordering', 'true_false']),
-  prompt: z.string().describe('Clear, unambiguous test question'),
+  prompt: z.string().describe('Clear, unambiguous test question testing high-yield recall (e.g. recipe ingredients, ratios, methods)'),
   expectedAnswer: z.string().describe('The strictly correct answer derived from source'),
   acceptableVariants: z.array(z.string()).nullable().describe('Acceptable synonyms or variations'),
   distractors: z.array(z.object({ text: z.string() })).nullable(),
@@ -35,23 +35,25 @@ export async function generateQuestionsForLesson(
     const { object } = await generateObject({
       model,
       schema: LessonQuestionsSchema,
-      prompt: `Generate 10 scored assessment questions for the lesson titled "${lessonTitle}".
+      prompt: `You are generating a 10-question active recall test for the lesson: "${lessonTitle}".
 
-Target Knowledge Nodes to test:
+Target Knowledge Nodes:
 ${JSON.stringify(nodes, null, 2)}
 
-Requirements:
+Requirements for High-Yield Testing:
 1. Generate exactly 10 questions total.
-2. Mix multiple choice, fill-in-the-blank, typed recall, and true/false formats.
-3. Every correct answer MUST be verifiable from the sourceChunk text.
-4. For multiple choice, distractors must be plausible but definitively incorrect per the source text.`,
+2. Focus questions on PRACTICAL, ACTIONABLE RECALL:
+   - For recipes/drinks: Test base spirits, specific modifiers, measurements, ratios, methods (shaken vs stirred), and garnishes. (e.g. "What is the primary spirit in a Daiquiri?", "What liqueur gives an Aviation its violet hue?", "What are the equal parts in a Negroni?").
+   - For procedures: Test step sequence, critical rules, and differences between similar items.
+3. Mix formats: Multiple choice, fill-in-the-blank, typed recall, and true/false.
+4. For multiple choice: Create realistic, plausible distractors (e.g. real substitute liquors or ingredients) that test genuine comprehension rather than obvious giveaways.
+5. Every correct answer MUST be verifiable from the sourceChunk text.`,
     });
 
     return object.questions as PresetQuestion[];
   } catch (error) {
     console.error('[Mnemon AI] Question generation error:', error);
     const causeMsg = error instanceof Error ? error.message : '';
-    // Distinguish our own request-shape bugs from key/network problems
     if (/invalid_json_schema|invalid schema/i.test(causeMsg)) {
       throw new Error(
         'Question generation failed due to an app formatting issue, not your API key. Check the server terminal log for details.'
